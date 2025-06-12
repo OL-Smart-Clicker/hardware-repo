@@ -58,6 +58,12 @@ char iot_hub_hostname[128];
 char device_id[64];
 unsigned long sas_token_expiry;
 
+// Button Configuration
+const int buttonPin = 6;                // Button connected to digital pin 6
+unsigned long lastPressTime = 0;        // Last valid button press time
+const unsigned long buttonCooldown = 10000;  // 10-second cooldown
+bool buttonAvailable = true;            // Button state flag
+
 // Network clients
 WiFiSSLClient wifiClient;
 WiFiUDP ntpUDP;
@@ -246,6 +252,8 @@ bool registerWithDPS(const String &deviceKey) {
   int statusCode = httpClient.responseStatusCode();
   String response = httpClient.responseBody();
 
+  Serial.println(statusCode);
+
   if (statusCode == 202) {
     StaticJsonDocument<512> doc;
     DeserializationError error = deserializeJson(doc, response);
@@ -417,8 +425,15 @@ void sendUWBTelemetry() {
   Serial.println("UWB telemetry sent to Azure IoT Hub!");
 }
 
+void handleButtonPress() {
+  Serial.println("Button pressed - forcing telemetry send!");
+  has_new_data = true;                // Force send on next loop iteration
+  lastMessage = millis() - messageInterval; // Bypass interval check
+}
+
 void setup() {
   Serial.begin(9600);
+  pinMode(buttonPin, INPUT_PULLUP);
   delay(2000);
   Serial.println("Starting UWB Tag with Azure IoT Hub...");
 
@@ -456,6 +471,20 @@ void loop() {
   // Handle Azure IoT Hub
   mqttClient.poll();
 
+  // Check button state
+  int buttonState = digitalRead(buttonPin);
+  if (buttonState == LOW && buttonAvailable) {
+      handleButtonPress();
+      buttonAvailable = false;
+      lastPressTime = millis();
+  }
+
+  // Re-enable button after cooldown
+  if (!buttonAvailable && (millis() - lastPressTime) >= buttonCooldown) {
+      buttonAvailable = true;
+      Serial.println("Button ready again");
+  }
+
   // Check if SAS token needs renewal
   if (timeClient.getEpochTime() >= (sas_token_expiry - 300)) {
     Serial.println("Renewing SAS token...");
@@ -479,5 +508,5 @@ void loop() {
     has_new_data = false;
   }
   
-  delay(100);
+  delay(50);
 }

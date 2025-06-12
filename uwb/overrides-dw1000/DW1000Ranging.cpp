@@ -994,7 +994,6 @@ void DW1000RangingClass::receiver() {
  * #### Methods for range computation and corrections  #######################
  * ######################################################################### */
 
-
 void DW1000RangingClass::computeRangeAsymmetric(DW1000Device* myDistantDevice, DW1000Time* myTOF) {
 	// asymmetric two-way ranging (more computation intense, less error prone)
 	DW1000Time round1 = (myDistantDevice->timePollAckReceived-myDistantDevice->timePollSent).wrap();
