@@ -31,7 +31,7 @@ const uint16_t ANCHOR_3 = 3;
 // Measurement configuration
 const uint8_t MAX_MEASUREMENTS = 20;
 const uint8_t OUTLIERS_TO_REMOVE = 3;
-const unsigned long BURST_DURATION_MS = 20000;
+const unsigned long BURST_DURATION_MS = 60000;
 
 // Measurement buffers for each anchor
 float measurements_A1[MAX_MEASUREMENTS];
@@ -40,6 +40,11 @@ float measurements_A3[MAX_MEASUREMENTS];
 uint8_t measurementIndex_A1 = 0;
 uint8_t measurementIndex_A2 = 0;
 uint8_t measurementIndex_A3 = 0;
+
+// Anchor completion tracking
+bool anchor_A1_complete = false;
+bool anchor_A2_complete = false;
+bool anchor_A3_complete = false;
 
 // Latest filtered distances for telemetry
 float latest_distance_A1 = 0.0;
@@ -327,6 +332,18 @@ void connectToIoTHub(const String &deviceKey) {
   Serial.println("Connected to Azure IoT Hub!");
 }
 
+// Helper function to get anchor completion status summary
+void printAnchorStatus() {
+  Serial.println("=== Anchor Status ===");
+  Serial.print("A1: "); Serial.print(measurementIndex_A1); Serial.print("/"); Serial.print(MAX_MEASUREMENTS);
+  Serial.print(anchor_A1_complete ? " [COMPLETE]" : " [ACTIVE]"); Serial.println();
+  Serial.print("A2: "); Serial.print(measurementIndex_A2); Serial.print("/"); Serial.print(MAX_MEASUREMENTS);
+  Serial.print(anchor_A2_complete ? " [COMPLETE]" : " [ACTIVE]"); Serial.println();
+  Serial.print("A3: "); Serial.print(measurementIndex_A3); Serial.print("/"); Serial.print(MAX_MEASUREMENTS);
+  Serial.print(anchor_A3_complete ? " [COMPLETE]" : " [ACTIVE]"); Serial.println();
+  Serial.println("====================");
+}
+
 // UWB Functions
 void processAndPrintAverage(uint16_t anchorID, float* measurements) {
   std::sort(measurements, measurements + MAX_MEASUREMENTS);
@@ -358,34 +375,65 @@ void newRange() {
   uint16_t anchorID = device->getShortAddress();
   float range = device->getRange();
   
+  // Skip measurement if this anchor already has enough data
   switch(anchorID) {
     case ANCHOR_1:
+      if(anchor_A1_complete) {
+        return; // Ignore this anchor for the remainder of the burst
+      }
       if(measurementIndex_A1 >= MAX_MEASUREMENTS) {
         processAndPrintAverage(ANCHOR_1, measurements_A1);
+        anchor_A1_complete = true;
+        Serial.println("Anchor 1 measurements complete - ignoring further readings");
       }
       else {
         measurements_A1[measurementIndex_A1++] = range;
-        Serial.print("Measured distance from A1: "); Serial.println(range);
+        Serial.print("Measured distance from A1 (");
+        Serial.print(measurementIndex_A1);
+        Serial.print("/");
+        Serial.print(MAX_MEASUREMENTS);
+        Serial.print("): ");
+        Serial.println(range);
       }
       break;
       
     case ANCHOR_2:
+      if(anchor_A2_complete) {
+        return; // Ignore this anchor for the remainder of the burst
+      }
       if(measurementIndex_A2 >= MAX_MEASUREMENTS) {
         processAndPrintAverage(ANCHOR_2, measurements_A2);
+        anchor_A2_complete = true;
+        Serial.println("Anchor 2 measurements complete - ignoring further readings");
       }
       else {
         measurements_A2[measurementIndex_A2++] = range;
-        Serial.print("Measured distance from A2: "); Serial.println(range);
+        Serial.print("Measured distance from A2 (");
+        Serial.print(measurementIndex_A2);
+        Serial.print("/");
+        Serial.print(MAX_MEASUREMENTS);
+        Serial.print("): ");
+        Serial.println(range);
       }
       break;
       
     case ANCHOR_3:
+      if(anchor_A3_complete) {
+        return; // Ignore this anchor for the remainder of the burst
+      }
       if(measurementIndex_A3 >= MAX_MEASUREMENTS) {
         processAndPrintAverage(ANCHOR_3, measurements_A3);
+        anchor_A3_complete = true;
+        Serial.println("Anchor 3 measurements complete - ignoring further readings");
       }
       else {
         measurements_A3[measurementIndex_A3++] = range;
-        Serial.print("Measured distance from A3: "); Serial.println(range);
+        Serial.print("Measured distance from A3 (");
+        Serial.print(measurementIndex_A3);
+        Serial.print("/");
+        Serial.print(MAX_MEASUREMENTS);
+        Serial.print("): ");
+        Serial.println(range);
       }
       break;
       
@@ -393,6 +441,11 @@ void newRange() {
       Serial.print("Unknown anchor: ");
       Serial.println(anchorID);
       return;
+  }
+  
+  // Check if all anchors are complete for early termination
+  if(anchor_A1_complete && anchor_A2_complete && anchor_A3_complete) {
+    Serial.println("All anchors have completed measurements - ending burst early");
   }
 }
 
@@ -409,7 +462,7 @@ void inactiveDevice(DW1000Device* device) {
 
 void sendUWBTelemetry() {
   String topic = "devices/" + String(device_id) + "/messages/events/";
-  StaticJsonDocument<400> doc;
+  StaticJsonDocument<512> doc;
   
   doc["deviceId"] = device_id;
   doc["messageType"] = "uwb_ranging";
@@ -425,7 +478,16 @@ void sendUWBTelemetry() {
   distances["anchor2"] = latest_distance_A2;
   distances["anchor3"] = latest_distance_A3;
   
-  char payload[512];
+  // Add measurement quality information
+  JsonObject quality = uwb.createNestedObject("measurementQuality");
+  quality["anchor1_samples"] = measurementIndex_A1;
+  quality["anchor2_samples"] = measurementIndex_A2;
+  quality["anchor3_samples"] = measurementIndex_A3;
+  quality["anchor1_complete"] = anchor_A1_complete;
+  quality["anchor2_complete"] = anchor_A2_complete;
+  quality["anchor3_complete"] = anchor_A3_complete;
+  
+  char payload[640];
   serializeJson(doc, payload);
   
   Serial.println("=== Sending UWB Telemetry ===");
@@ -487,12 +549,12 @@ void loop() {
     buttonAvailable = false;
     lastPressTime = millis();
     readyForBurst = true;
+    anchor_A1_complete = anchor_A2_complete = anchor_A3_complete = false;
   }
   if (!buttonAvailable && (millis() - lastPressTime) >= buttonCooldown) {
     buttonAvailable = true;
     Serial.println("Button ready again");
   }
-
   if (readyForBurst) {
     // Reset measurement buffers and counters
     measurementIndex_A1 = measurementIndex_A2 = measurementIndex_A3 = 0;
@@ -508,32 +570,65 @@ void loop() {
     burstStartTime = millis();
     burstInProgress = true;
     readyForBurst = false;
-    Serial.println("Burst ranging started.");
-  }
-
-  // During burst, collect up to 20 measurements per anchor or for 2 seconds
+    Serial.println("Burst ranging started - measuring from all 3 anchors simultaneously.");
+  }  // During burst, collect up to 20 measurements per anchor or for 20 seconds
   if (burstInProgress) {
     DW1000Ranging.loop(); // This will call newRange() as measurements arrive
-    bool allFull = (latest_distance_A1 != 0.0) &&
-                   (latest_distance_A2 != 0.0) &&
-                   (latest_distance_A3 != 0.0);
-
-    if ((millis() - burstStartTime > BURST_DURATION_MS) || allFull) {
+    
+    // Print status every few seconds
+    static unsigned long lastStatusPrint = 0;
+    if (millis() - lastStatusPrint > 3000) {
+      printAnchorStatus();
+      lastStatusPrint = millis();
+    }
+    
+    // Check if all anchors are complete (either MAX_MEASUREMENTS reached or processed)
+    bool allComplete = anchor_A1_complete && anchor_A2_complete && anchor_A3_complete;
+    
+    // Check timeout conditions
+    bool timeout = (millis() - burstStartTime > BURST_DURATION_MS);
+    
+    // End burst if: all anchors complete, timeout, or we have sufficient data from all and reasonable time
+    if (allComplete || timeout) {
       burstInProgress = false;
       readyForSend = true;
+      
+      if (allComplete) {
+        Serial.println("Burst completed - sufficient data from all anchors");
+      } else if (timeout) {
+        Serial.println("Burst completed - timeout reached");
+      }
+      
+      // Print final summary
+      printAnchorStatus();
+      unsigned long burstDuration = millis() - burstStartTime;
+      Serial.print("Burst duration: ");
+      Serial.print(burstDuration);
+      Serial.println(" ms");
     }
   }
-
   if (readyForSend) {
+    // Process any remaining measurements that haven't been processed yet
     if (latest_distance_A1 == 0.0 && measurementIndex_A1 > 0) {
+      Serial.print("Processing remaining measurements for Anchor 1 (");
+      Serial.print(measurementIndex_A1);
+      Serial.println(" measurements)");
       processAndPrintAverage(ANCHOR_1, measurements_A1);
     }
     if (latest_distance_A2 == 0.0 && measurementIndex_A2 > 0) {
+      Serial.print("Processing remaining measurements for Anchor 2 (");
+      Serial.print(measurementIndex_A2);
+      Serial.println(" measurements)");
       processAndPrintAverage(ANCHOR_2, measurements_A2);
     }
     if (latest_distance_A3 == 0.0 && measurementIndex_A3 > 0) {
+      Serial.print("Processing remaining measurements for Anchor 3 (");
+      Serial.print(measurementIndex_A3);
+      Serial.println(" measurements)");
       processAndPrintAverage(ANCHOR_3, measurements_A3);
     }
+    
+    Serial.println("Connecting to WiFi for telemetry transmission...");
     connectToWiFi();
     // Process and send telemetry
     // processAndSendTelemetry();
