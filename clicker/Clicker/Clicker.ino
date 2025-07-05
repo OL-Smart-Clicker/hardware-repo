@@ -20,10 +20,22 @@
 const uint8_t PIN_RST = 7;
 const uint8_t PIN_IRQ = 8; // Changed to valid interrupt pin for R4
 const uint8_t PIN_SS = 10;
+
+/**
+ * This is the device id of the clicker, it must be unique in the network and must be different from the device ids of the anchors.
+ * This id can be arbitrary, but for safety it should be greater than the maximum number of anchors supported.
+ */
 const uint8_t UWB_DEVICE_ID = 10;
+
+// This is the network id of the clicker, it must be the same for all devices in the network, both anchors and clickers.
 const uint8_t UWB_NETWORK_ID = 10;
 
 // Define anchor IDs
+
+/**
+ * This value defines the maximum number of anchors that can be registered.
+ * It should be at least as large as the number of anchors configured in the dashboard application in office management.
+ */
 const int MAX_ANCHORS = 10;
 int anchors[MAX_ANCHORS];
 int anchorCount = 0;
@@ -31,7 +43,7 @@ int anchorCount = 0;
 // Measurement configuration
 const uint8_t MAX_MEASUREMENTS = 20;
 const uint8_t OUTLIERS_TO_REMOVE = 3;
-const unsigned long BURST_DURATION_MS = 60000;
+const unsigned long BURST_DURATION_MS = 10000;
 
 // Measurement buffers for each anchor
 float measurements[MAX_ANCHORS][MAX_MEASUREMENTS];
