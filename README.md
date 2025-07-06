@@ -11,7 +11,7 @@ This repository contains the Arduino UNO R4-bound firmware for the Smart Clicker
 - `clicker/`
   - Contains the firmware for the Clicker device, a mobile unit that communicates with the Anchor for positioning and event tracking.
   - Main code: `clicker/Clicker/Clicker.ino`
-  - Includes `secrets_template.h` for configuration of sensitive data (e.g., WiFi credentials, keys). Copy the contents of this file to `secrets.h` and fill in your values.
+  - Includes `secrets_template.h` for configuration of sensitive data (e.g., WiFi credentials, keys). Rename the file to `secrets.h` and fill in your values.
 
 ## Required Libraries
 
@@ -47,14 +47,14 @@ When copying the files, the replace option should be selected.
     - Copy the modified UWB files according to the instructions above.
 3. **Configure secrets:**
     - **Clicker**
-        - Copy `secrets_template.h` to `secrets.h` in the relevant device folder.
+        - Rename `secrets_template.h` to `secrets.h`.
         - Fill in your WiFi credentials and any other required secrets.
-        - Change `UWB_DEVICE_ID` according to the instructions in the comments.
+        - Change `UWB_DEVICE_ID` in `Clicker.ino` according to the instructions in the comments.
     - **Anchor**
-        - Change `UWB_DEVICE_ID` to the desired anchor ID. It should match the ID provided in the dashboard application
+        - Change `UWB_DEVICE_ID` in `Anchor.ino` to the desired anchor ID. It should match the ID provided in the dashboard application
     - Change `UWB_NETWORK_ID` in both clicker and anchor code to the desired value. The value should be identical in both files.
 4. **Open the `.ino` file** for the device you want to program (Anchor or Clicker) in the Arduino IDE.
-5. **Select the correct board** (Arduino UNO R4) and port.
+5. **Select the correct board** (Arduino UNO R4) and port after plugging in your device.
 6. **Upload the firmware** to your device.
 
 ## Contributors
